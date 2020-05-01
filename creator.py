@@ -3,7 +3,7 @@ import random
 import pandas as pd
 import numpy as np
 from os import path
-from PIL import Image, ImageFilter
+from PIL import Image
 from skimage.metrics import structural_similarity as ssim
 import matplotlib.pyplot as plt
 
@@ -13,6 +13,12 @@ HEIGHT = 64
 
 
 def extract_features(image):
+    """
+    This function will extract features from a given image. As of right now, this function is incomplete and simply
+    returns a list of all colors found in the image and their counts.
+    :param image: The input image.
+    :return: A list of colors and their count.
+    """
     print('Extracting features')
     image = image.resize((WIDTH, HEIGHT))
     colors = image.getcolors(WIDTH * HEIGHT)
@@ -49,8 +55,6 @@ def select_artwork(wall, art_csv, features):
             art_array = np.asarray(image_res)
             score = ssim(wall_array, art_array, multichannel=True)
             if score > best[1]:
-                print(score)
-                print(path)
                 best = (image, score)
         return best[0]
 
@@ -71,11 +75,26 @@ def blend(wall, artwork):
     x = int(wall_mid_x - art_mid_x)
     y = int(wall_mid_y - art_mid_y)
 
+    def fade_in(x, y, wall_section, art_section, alpha, final_alpha, final_img, alpha_step=0.02, crop_step=3):
+        blend = Image.blend(art_section, wall_section, alpha=alpha)
+        final_img.paste(blend, (x, y))
+        new_alpha = alpha - alpha_step
+        if new_alpha < final_alpha:
+            return final_img
+        else:
+            width, height = art_section.size
+            width -= crop_step
+            height -= crop_step
+            x += crop_step
+            y += crop_step
+            new_art_section = art_section.crop((crop_step, crop_step, width, height))
+            new_wall_section = wall_section.crop((crop_step, crop_step, width, height))
+            return fade_in(x, y, new_wall_section, new_art_section, new_alpha, final_alpha, final_img)
     wall_section = wall.crop((x, y, x + art_width, y + art_height))
-    blend = Image.blend(artwork, wall_section, alpha=0.5)
-    artwork_blur = artwork.filter(ImageFilter.GaussianBlur(1000)).convert('L')
+    final_alpha = 0.4
+    faded_img = fade_in(0, 0, wall_section, artwork, 1, final_alpha, wall_section)
 
-    wall.paste(blend, (x, y))
+    wall.paste(faded_img, (x, y))
     print('Finished blending the artwork into the wall')
     return wall
 
