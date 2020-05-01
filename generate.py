@@ -59,7 +59,6 @@ def save(output_dir, images, csv):
     for idx, image in enumerate(images):
         name = str(idx) + '.png'
         file_path = path.join(output_dir, name)
-        print(image.shape)
         vutils.save_image(image, file_path)
         data["Path"].append(file_path)
 
