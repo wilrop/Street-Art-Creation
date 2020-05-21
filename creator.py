@@ -27,7 +27,7 @@ def extract_features(image):
     return features
 
 
-def select_artwork(wall, art_csv, features):
+def select_artwork(wall, art_csv, features, optimal_sim=0.1, sim_dist=0.015, parent_w=0.8, wall_w=0.2):
     print('Selecting artwork')
     artworks = pd.read_csv(art_csv)
 
@@ -43,19 +43,28 @@ def select_artwork(wall, art_csv, features):
         else:
             return selection
 
-    # selection = select_with_features(artworks, features)
-
     def select_with_sim(wall):
         wall_res = wall.resize((WIDTH, HEIGHT))
         wall_array = np.asarray(wall_res)
-        best = (None, -2)
-        for path in artworks["Path"]:
-            image = Image.open(path)
-            image_res = image.resize((WIDTH, HEIGHT))
-            art_array = np.asarray(image_res)
-            score = ssim(wall_array, art_array, multichannel=True)
-            if score > best[1]:
-                best = (image, score)
+        best = (None, None, float('-inf'))
+        lower_bound = optimal_sim - sim_dist
+        upper_bound = optimal_sim + sim_dist
+        minx = 0
+        maxx = (optimal_sim - lower_bound)**2
+        for idx, row in artworks.iterrows():
+            img_path = row["Path"]
+            parent_sim = row["Similarity"]
+            if lower_bound < parent_sim < upper_bound:
+                parent_score = 1 - ((optimal_sim - parent_sim)**2 - minx)/(maxx - minx)  # SE scaled between [0, 1].
+                image = Image.open(img_path)
+                image_res = image.resize((WIDTH, HEIGHT))
+                art_array = np.asarray(image_res)
+
+                wall_score = (ssim(wall_array, art_array, multichannel=True) + 1) / 2  # [0, 1]
+                score = (wall_w * wall_score) + (parent_w * parent_score)  # We try to maximize this trade-off
+                if score > best[2]:
+                    best = (image, img_path, score)
+        print(best[1])
         return best[0]
 
     artwork = select_with_sim(wall)
@@ -75,7 +84,7 @@ def blend(wall, artwork):
     x = int(wall_mid_x - art_mid_x)
     y = int(wall_mid_y - art_mid_y)
 
-    def fade_in(x, y, wall_section, art_section, alpha, final_alpha, final_img, alpha_step=0.02, crop_step=3):
+    def fade_in(x, y, wall_section, art_section, alpha, final_alpha, final_img, alpha_step=0.025, crop_step=2):
         blend = Image.blend(art_section, wall_section, alpha=alpha)
         final_img.paste(blend, (x, y))
         new_alpha = alpha - alpha_step
@@ -91,7 +100,7 @@ def blend(wall, artwork):
             new_wall_section = wall_section.crop((crop_step, crop_step, width, height))
             return fade_in(x, y, new_wall_section, new_art_section, new_alpha, final_alpha, final_img)
     wall_section = wall.crop((x, y, x + art_width, y + art_height))
-    final_alpha = 0.4
+    final_alpha = 0.25
     faded_img = fade_in(0, 0, wall_section, artwork, 1, final_alpha, wall_section)
 
     wall.paste(faded_img, (x, y))
@@ -113,10 +122,17 @@ def show_and_save(street_art, output_dir, output_name):
 def create(args):
     input_file = args.inputFile
     wall = Image.open(input_file)
+    if wall.mode != 'RGB':
+        wall = wall.convert('RGB')
     features = extract_features(wall)
 
     art_csv = args.artCSV
-    artwork = select_artwork(wall, art_csv, features)
+    optimal_sim = 0.1  # Heuristic that shows the best similarity between a generated image and its parent.
+    sim_dist = 0.015  # The image similarity to its parent should be between the bounds of optimal_sim +- this bound.
+    parent_w = 0.75  # Weight of the similarity to the parent.
+    wall_w = 0.25  # Weight of the similarity to the wall.
+    artwork = select_artwork(wall, art_csv, features, optimal_sim, sim_dist, parent_w, wall_w)
+
     street_art = blend(wall, artwork)
 
     output_dir = args.outputDir

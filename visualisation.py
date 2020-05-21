@@ -75,7 +75,7 @@ def plot_real_fake(real_imgs, gen_imgs, output_dir=None):
     # Plot the fake images from the last epoch
     plt.subplot(1, 2, 2)
     plt.axis("off")
-    plt.title("Fake Images")
+    plt.title("Generated Images")
     plt.imshow(np.transpose(gen_imgs, (1, 2, 0)))
 
     if output_dir is not None:
@@ -83,6 +83,26 @@ def plot_real_fake(real_imgs, gen_imgs, output_dir=None):
         plt.savefig(output_path)
 
     plt.show()
+
+
+def plot_gen_parent(generated, parent, sim):
+    sim = sim * 100
+    sim = "{:.2f}".format(sim)
+    fig = plt.figure()
+    fig.suptitle("Similarity: " + sim + "%")
+
+    plt.subplot(1, 2, 1)  # Arguments are nrows, ncolumns, index
+    plt.axis("off")
+    plt.title("Generated Image")
+    plt.imshow(np.asarray(generated))
+
+    # Plot the fake images from the last epoch
+    plt.subplot(1, 2, 2)
+    plt.axis("off")
+    plt.title("Parent")
+    plt.imshow(np.asarray(parent))
+    plt.show()
+
 
 #TODO: Bugfix FFMPEG is missing
 def create_animation(img_list):
